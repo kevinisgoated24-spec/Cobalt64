@@ -6,6 +6,7 @@
 //  that never reaches a login window (read it with `navi48test log`).
 //
 #include "Navi48Ttl.hpp"
+#include "asic_profile.h"
 #include "../Navi48Bringup.hpp"
 #include "../amd/amdgpu_regs.h"
 #include "../amd/amdgpu_init.h"
@@ -337,8 +338,8 @@ uint32_t Navi48Ttl::queryGcHardwareInfo(GcHardwareInfo *raw) {
     auto *o = reinterpret_cast<GcHardwareInfoLayout *>(raw);
     const amdgpu::GFXConfig &g = mCtx->gfx;
 
-    uint32_t se = g.max_shader_engines ? g.max_shader_engines : 4;
-    uint32_t sa = g.max_sh_per_se      ? g.max_sh_per_se      : 2;
+    uint32_t se = g.max_shader_engines ? g.max_shader_engines : COBALT_MAX_SE;
+    uint32_t sa = g.max_sh_per_se      ? g.max_sh_per_se      : COBALT_MAX_SH_PER_SE;
     if (se > 4) se = 4;                    // the struct holds exactly 4 rows
     if (sa > 2) sa = 2;                    // ...of 2 entries
     o->numShaderEngines     = se;
@@ -346,7 +347,7 @@ uint32_t Navi48Ttl::queryGcHardwareInfo(GcHardwareInfo *raw) {
     o->popcountedBitmap     = g.global_active_rb_bitmap;
 
     // max_cu_per_sh counts CUs; the caller wants WGPs, which are CU pairs.
-    uint32_t wgpPerSa = (g.max_cu_per_sh ? g.max_cu_per_sh : 8) / 2;
+    uint32_t wgpPerSa = (g.max_cu_per_sh ? g.max_cu_per_sh : COBALT_MAX_CU_PER_SH) / 2;
     if (wgpPerSa > 32) wgpPerSa = 32;
     const uint32_t fullMask = (wgpPerSa >= 32) ? 0xFFFFFFFFu : ((1u << wgpPerSa) - 1u);
     for (uint32_t i = 0; i < se; i++)

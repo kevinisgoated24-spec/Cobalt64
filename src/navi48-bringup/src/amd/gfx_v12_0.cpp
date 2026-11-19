@@ -78,6 +78,7 @@
 //
 
 #include <string.h>
+#include "asic_profile.h"
 #include "amdgpu_gfx.h"
 #include "amdgpu_log.h"
 
@@ -369,11 +370,12 @@ gfx_gpu_early_init(const DeviceContext &dev, GFXConfig &cfg)
 
     // Navi 48 die geometry: 4 SE x 2 SA/SE x 4 WGP/SA x 2 CU/WGP = 64 CU,
     // 4 RB/SE = 16 RBs, 8 hardware contexts.
-    cfg.max_shader_engines  = 4;
-    cfg.max_sh_per_se       = 2;
-    cfg.max_backends_per_se = 4;
-    cfg.max_cu_per_sh       = 8;
-    cfg.max_hw_contexts     = 8;
+    // Per-die values from asic_profile.h (Navi 44: 2 SE x 2 SA x 8 CU = 32 CU, 8 RBs).
+    cfg.max_shader_engines  = COBALT_MAX_SE;
+    cfg.max_sh_per_se       = COBALT_MAX_SH_PER_SE;
+    cfg.max_backends_per_se = COBALT_MAX_RB_PER_SE;
+    cfg.max_cu_per_sh       = COBALT_MAX_CU_PER_SH;
+    cfg.max_hw_contexts     = COBALT_MAX_HW_CONTEXTS;
 
     // gfx_v12_0.c:1643-1647 — IP_VERSION(12, 0, 0) / (12, 0, 1).
     cfg.sc_prim_fifo_size_frontend = 0x20;
@@ -394,10 +396,10 @@ gfx_gpu_early_init(const DeviceContext &dev, GFXConfig &cfg)
             cfg.sc_prim_fifo_size_frontend, cfg.sc_prim_fifo_size_backend,
             cfg.sc_hiz_tile_fifo_size, cfg.sc_earlyz_tile_fifo_size);
 
-    if (!dev.ip.isVersion(IPBlock::GC, 12, 0, 1)) {
+    if (!dev.ip.isVersion(IPBlock::GC, kIP_GFX.major, kIP_GFX.minor, kIP_GFX.rev)) {
         GFX_LOG("gpu_early_init: WARNING discovery reports GC %u.%u.%u, "
-                "not 12.0.1 — the hardcoded Navi 48 caps may not apply",
-                gc.major, gc.minor, gc.rev);
+                "not %u.%u.%u — the hardcoded " COBALT_ASIC_NAME " caps may not apply",
+                gc.major, gc.minor, gc.rev, kIP_GFX.major, kIP_GFX.minor, kIP_GFX.rev);
     }
     return kIOReturnSuccess;
 }

@@ -47,6 +47,32 @@ The result is `src/navi48-bringup/build/Navi48Bringup.kext` (x86_64, ad-hoc sign
 11 ABI). Check it with: `dwarfdump --uuid build/Navi48Bringup.kext/Contents/MacOS/Navi48Bringup`
 and `nm -u -arch x86_64 <that binary>` (only kernel, IOKit and KPI symbols).
 
+### RX 9060 XT (Navi 44) build — experimental, untested on hardware
+
+The `navi44` branch of this fork adds an `ASIC` switch (see `src/navi48-bringup/src/asic_profile.h`):
+
+```
+tools/fetch-firmware.sh <path-to-linux-firmware> navi44     # gc_12_0_0_*, psp_14_0_2_*, sdma_7_0_0, smu_14_0_2
+make -C src/navi48-bringup ASIC=navi44 MKSDK=/path/to/RDNA4FB/MacKernelSDK all
+```
+
+The result is `src/navi48-bringup/build-navi44/Navi48Bringup.kext`, matching PCI `0x7590` only. It keeps
+the same bundle id, class names and N48N ABI, so Mesa (with `mesa-patches/0010`) and the tools work
+unchanged; Mesa switches to its gfx1200 table on its own when the kext reports GC 12.0.0.
+Remove any OpenCore `device-id` spoof for the card first, or the kext will not match it.
+
+What changes per ASIC: PCI IDs, IP versions (GC 12.0.0 / PSP+SMU 14.0.2 / SDMA 7.0.0), firmware blob
+names, and die geometry (2 SE x 2 SA x 8 CU = 32 CUs, 8 RBs). Linux amdgpu drives both dies through the
+same code (gfx_v12_0.c, psp_v14_0.c, sdma_v7_0.c, smu_v14_0_2_ppt.c), which is why the rest is shared.
+Not yet verified on a 9060 XT: the PSP/SMU bring-up, the DCN display path and the dcn41 register
+allowlist ranges (derived on Navi 48).
+
+A Linux/WSL cross build is possible with Apple's ld64 (cctools-port) and a macOS SDK:
+
+```
+make -C src/navi48-bringup ASIC=navi44 SDK=/path/MacOSX14.5.sdk MKSDK=/path/MacKernelSDK LDEXTRA=-fuse-ld=/path/to/x86_64-apple-darwin-ld NM_UNDEF="llvm-nm -u" XATTR=true CODESIGN="rcodesign sign"
+```
+
 ## Optional pieces that are NOT in this repository
 
 The shader cache (`src/shadercache/shadercache.c` is only its parser) and four gfx1201 blit

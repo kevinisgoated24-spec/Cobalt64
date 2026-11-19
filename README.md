@@ -75,7 +75,7 @@ code, and running it today needs a lot of manual setup on a separate macOS insta
 | `src/g2capture` | Small capture tool for Apple shader-compiler records. |
 | `tools/native` | navi48metal (a Metal device bundle that runs Metal on top of the Vulkan driver), mtlprobe (API probe), autotranslate (AIR -> SPIR-V translation scripts) and navi48accel (aux kext). |
 | `tools/pc`, `tools/dcn41`, `tools/conductor` | PC-side test CLI and run scripts, display-register tooling, test suite runners and "planted break" mutation tests. |
-| `mesa-patches` | RADV (Mesa Vulkan) Darwin port as nine patches on a pinned Mesa commit; see `mesa-patches/README.txt`. |
+| `mesa-patches` | RADV (Mesa Vulkan) Darwin port as ten patches on a pinned Mesa commit; see `mesa-patches/README.txt`. |
 
 ## External projects and dependencies (not vendored; clone them yourself)
 

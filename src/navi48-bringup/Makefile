@@ -7,10 +7,41 @@ PRODUCT   := Navi48Bringup
 BUNDLE_ID := com.navi48.bringup
 ARCH      := x86_64
 DEPLOY    := 11.0
-SDK       := $(shell xcrun --sdk macosx --show-sdk-path)
+SDK       ?= $(shell xcrun --sdk macosx --show-sdk-path)
 MKSDK     := ../RDNA4FB/MacKernelSDK
 
-BUILD := build
+# Which RDNA 4 die to build for (see src/asic_profile.h):
+#   ASIC=navi48  RX 9070 / 9070 XT / R9700 (gfx1201)  - default, the upstream target
+#   ASIC=navi44  RX 9060 XT                (gfx1200)
+ASIC ?= navi48
+ifeq ($(ASIC),navi48)
+ASIC_DEFS     :=
+ASIC_PCIMATCH := 0x75501002 0x75511002
+FW_REQUIRED   := gc_12_0_1_imu gc_12_0_1_me gc_12_0_1_mec gc_12_0_1_pfp gc_12_0_1_rlc gc_12_0_1_uni_mes \
+                 psp_14_0_3_sos psp_14_0_3_ta sdma_7_0_1 smu_14_0_3
+FW_OTHER_ASIC := gc_12_0_0_imu gc_12_0_0_me gc_12_0_0_mec gc_12_0_0_pfp gc_12_0_0_rlc gc_12_0_0_uni_mes \
+                 psp_14_0_2_sos psp_14_0_2_ta sdma_7_0_0 smu_14_0_2
+BUILD ?= build
+else ifeq ($(ASIC),navi44)
+ASIC_DEFS     := -DCOBALT_ASIC_NAVI44=1
+ASIC_PCIMATCH := 0x75901002
+FW_REQUIRED   := gc_12_0_0_imu gc_12_0_0_me gc_12_0_0_mec gc_12_0_0_pfp gc_12_0_0_rlc gc_12_0_0_uni_mes \
+                 psp_14_0_2_sos psp_14_0_2_ta sdma_7_0_0 smu_14_0_2
+FW_OTHER_ASIC := gc_12_0_1_imu gc_12_0_1_me gc_12_0_1_mec gc_12_0_1_pfp gc_12_0_1_rlc gc_12_0_1_uni_mes \
+                 psp_14_0_3_sos psp_14_0_3_ta sdma_7_0_1 smu_14_0_3
+BUILD ?= build-navi44
+else
+$(error ASIC must be navi48 or navi44, not '$(ASIC)')
+endif
+
+# Host tools. Defaults are the macOS ones; a Linux/WSL cross build overrides them, e.g.
+#   make ASIC=navi44 SDK=... MKSDK=... LDEXTRA=-fuse-ld=/path/to/x86_64-apple-darwin-ld \
+#        NM_UNDEF="llvm-nm -u" XATTR=true CODESIGN="rcodesign sign"
+LDEXTRA  ?=
+NM_UNDEF ?= nm -u -arch $(ARCH)
+XATTR    ?= xattr
+CODESIGN ?= codesign --force --sign -
+
 KEXT  := $(BUILD)/$(PRODUCT).kext
 EXEC  := $(KEXT)/Contents/MacOS/$(PRODUCT)
 
@@ -20,12 +51,12 @@ CC  := clang
 CXX_SRCS := src/Navi48Bringup.cpp src/Navi48UserClient.cpp src/Navi48NativeClient.cpp src/Navi48MetalNub.cpp src/Navi48DisplayNub.cpp src/ipdiscovery.cpp src/psp.cpp $(wildcard src/amd/*.cpp) $(wildcard src/apple/*.cpp) $(wildcard src/dcn/*.cpp)
 # Firmware blobs (firmware/*.bin, tracked) are embedded as C arrays generated at build
 # time into src/fw/ (gitignored) by tools/embed-firmware.py: symbol fw_<blob>[] + fw_<blob>_size.
-FW_BINS  := $(wildcard firmware/*.bin)
+# Only the blobs for the selected ASIC: firmware/ may hold both dies' sets.
+FW_BINS  := $(filter-out $(patsubst %,firmware/%.bin,$(FW_OTHER_ASIC)),$(wildcard firmware/*.bin))
 FW_SRCS  := $(patsubst firmware/%.bin,src/fw/fw_%.c,$(FW_BINS))
 # REQUIRED blobs: AMD firmware from linux-firmware, NOT in this repository (see BUILDING.md and
 # tools/fetch-firmware.sh). The kext cannot link without them, so fail early with a clear message.
-FW_REQUIRED := gc_12_0_1_imu gc_12_0_1_me gc_12_0_1_mec gc_12_0_1_pfp gc_12_0_1_rlc gc_12_0_1_uni_mes \
-               psp_14_0_3_sos psp_14_0_3_ta sdma_7_0_1 smu_14_0_3
+# (FW_REQUIRED is set per ASIC at the top of this file.)
 FW_MISSING  := $(filter-out $(patsubst firmware/%.bin,%,$(FW_BINS)),$(FW_REQUIRED))
 # Our own compute test shaders, assembled from shaders/*.s (tools/build-shader.sh) and tracked as
 # shaders/*.bin so no LLVM is needed to build the kext.
@@ -101,13 +132,13 @@ OBJS := $(patsubst %.cpp,$(BUILD)/%.o,$(CXX_SRCS)) $(patsubst %.c,$(BUILD)/%.o,$
 
 COMMON := -arch $(ARCH) -target $(ARCH)-apple-macos$(DEPLOY) -isysroot $(SDK) \
   -I$(MKSDK)/Headers -Isrc -Isrc/amd -I$(XLAT12_DIR) -I$(SHADERCACHE_DIR) -I$(DCN41_DIR) -mmacosx-version-min=$(DEPLOY) \
-  -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT \
+  -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT $(ASIC_DEFS) \
   -D_FORTIFY_SOURCE=0 -nostdinc -fno-builtin -fno-common -fno-stack-protector \
   -mkernel -fapple-kext -Wall -Os -g
 CXXFLAGS := $(COMMON) -std=c++17 -fno-exceptions -fno-rtti -fcheck-new -fno-c++-static-destructors
 CFLAGS   := $(COMMON)
 LDFLAGS  := -arch $(ARCH) -target $(ARCH)-apple-macos$(DEPLOY) -isysroot $(SDK) \
-  -nostdlib -Xlinker -kext -L$(MKSDK)/Library/x86_64 -lkmodc++ -lkmod -Wl,-no_deduplicate
+  -nostdlib -Xlinker -kext -L$(MKSDK)/Library/x86_64 -lkmodc++ -lkmod -Wl,-no_deduplicate $(LDEXTRA)
 
 all: $(KEXT)
 
@@ -174,13 +205,13 @@ $(KEXT): $(OBJS) Info.plist
 	@# that the kext silently does not load — no message in dmesg, none in the
 	@# unified log, nothing on the ESP to see. 0.0.39 shipped that way because
 	@# ~AmdTtlServicesABI() had no body. Catch it at build time instead.
-	@bad=$$(nm -u -arch $(ARCH) $(EXEC) | c++filt | grep -E 'Navi48|AmdTtl|amdgpu::|n48::|n48dcn::|xlat12|_sc_|dcn41_' || true); \
+	@bad=$$($(NM_UNDEF) $(EXEC) | c++filt | grep -E 'Navi48|AmdTtl|amdgpu::|n48::|n48dcn::|xlat12|_sc_|dcn41_' || true); \
 	if [ -n "$$bad" ]; then \
 	  echo "LINK ERROR: these symbols are OURS but undefined — the kext will not load:"; \
 	  echo "$$bad" | sed 's/^/    /'; \
 	  rm -f $(EXEC); exit 1; \
 	fi
-	cp Info.plist $(KEXT)/Contents/Info.plist
+	sed 's/0x75501002 0x75511002/$(ASIC_PCIMATCH)/g' Info.plist > $(KEXT)/Contents/Info.plist
 	find $(KEXT) \( -name '.DS_Store' -o -name '._*' \) -delete
 	# xattr -cr does NOT remove com.apple.FinderInfo from the bundle ROOT, and
 	# codesign refuses any bundle carrying it ("resource fork, Finder information,
@@ -188,11 +219,11 @@ $(KEXT): $(OBJS) Info.plist
 	# activity on the build directory, so the build failed intermittently and the
 	# || fallback could not rescue it -- the fallback re-ran the same ineffective
 	# xattr -cr. Strip it explicitly first; -d on a missing attribute is harmless.
-	-xattr -d com.apple.FinderInfo $(KEXT) 2>/dev/null
-	xattr -cr $(KEXT)
-	codesign --force --sign - $(KEXT) || { xattr -d com.apple.FinderInfo $(KEXT) 2>/dev/null; xattr -cr $(KEXT); codesign --force --sign - $(KEXT); }
+	-$(XATTR) -d com.apple.FinderInfo $(KEXT) 2>/dev/null
+	$(XATTR) -cr $(KEXT)
+	$(CODESIGN) $(KEXT) || { $(XATTR) -d com.apple.FinderInfo $(KEXT) 2>/dev/null; $(XATTR) -cr $(KEXT); $(CODESIGN) $(KEXT); }
 	@test -f $(KEXT)/Contents/_CodeSignature/CodeResources || { echo 'codesign produced no CodeResources'; exit 1; }
-	@echo "Built $(KEXT) for $(ARCH) (min macOS $(DEPLOY))"
+	@echo "Built $(KEXT) for $(ARCH) / $(ASIC) (min macOS $(DEPLOY))"
 
 clean:
 	rm -rf $(BUILD)

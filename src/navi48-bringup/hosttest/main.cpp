@@ -18,6 +18,7 @@
 //  chain compile with a plain host clang++.
 //
 
+#include "asic_profile.h"   // -DCOBALT_ASIC_NAVI44=1 for the Navi 44 blob names
 #include "amdgpu_ucode_extract.h"
 #include "amdgpu_ucode_psp.h"
 #include "amdgpu_psp.h"
@@ -220,26 +221,26 @@ int main(int argc, char **argv) {
     // (CP_MES/CP_MES_DATA) and KIQ (CP_MES_KIQ/MES_KIQ_STACK) pipe payloads
     // unconditionally from the same uni_mes.bin bytes.
     std::vector<BlobSpec> blobs = {
-        {"sdma_7_0_1.bin",        kHostFwFile_SDMA,   "sdma",
+        {COBALT_FW_SDMA_NAME ".bin",        kHostFwFile_SDMA,   "sdma",
          {PSPGfxFwType::SDMA_UCODE_TH0}},
-        {"gc_12_0_1_rlc.bin",     kHostFwFile_RLC,     "rlc",
+        {COBALT_FW_GC_NAME(rlc) ".bin",     kHostFwFile_RLC,     "rlc",
          {PSPGfxFwType::RLC_RESTORE_LIST_GPM_MEM,
           PSPGfxFwType::RLC_RESTORE_LIST_SRM_MEM,
           PSPGfxFwType::RLC_IRAM,
           PSPGfxFwType::RLC_DRAM_BOOT,
           PSPGfxFwType::RLC_G}},
-        {"gc_12_0_1_imu.bin",     kHostFwFile_IMU,     "imu",
+        {COBALT_FW_GC_NAME(imu) ".bin",     kHostFwFile_IMU,     "imu",
          {PSPGfxFwType::IMU_I, PSPGfxFwType::IMU_D}},
-        {"gc_12_0_1_uni_mes.bin", kHostFwFile_MES_UNI, "uni_mes",
+        {COBALT_FW_GC_NAME(uni_mes) ".bin", kHostFwFile_MES_UNI, "uni_mes",
          {PSPGfxFwType::CP_MES, PSPGfxFwType::CP_MES_DATA,
           PSPGfxFwType::CP_MES_KIQ, PSPGfxFwType::MES_KIQ_STACK}},
-        {"gc_12_0_1_pfp.bin",     kHostFwFile_CP_PFP,  "pfp",
+        {COBALT_FW_GC_NAME(pfp) ".bin",     kHostFwFile_CP_PFP,  "pfp",
          {PSPGfxFwType::RS64_PFP, PSPGfxFwType::RS64_PFP_P0}},
-        {"gc_12_0_1_me.bin",      kHostFwFile_CP_ME,   "me",
+        {COBALT_FW_GC_NAME(me) ".bin",      kHostFwFile_CP_ME,   "me",
          {PSPGfxFwType::RS64_ME, PSPGfxFwType::RS64_ME_P0}},
-        {"gc_12_0_1_mec.bin",     kHostFwFile_CP_MEC,  "mec",
+        {COBALT_FW_GC_NAME(mec) ".bin",     kHostFwFile_CP_MEC,  "mec",
          {PSPGfxFwType::RS64_MEC, PSPGfxFwType::RS64_MEC_P0, PSPGfxFwType::RS64_MEC_P1}},
-        {"smu_14_0_3.bin",        kHostFwIPBase + PSPGfxFwType::SMU, "smu",
+        {COBALT_FW_SMU_NAME ".bin",        kHostFwIPBase + PSPGfxFwType::SMU, "smu",
          {PSPGfxFwType::SMU}},
     };
 

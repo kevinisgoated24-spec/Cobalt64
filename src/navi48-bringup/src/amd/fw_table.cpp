@@ -34,6 +34,7 @@
 //  no allocation, no static-initialization-order dependency.
 //
 #include "../fw/fw_table.h"
+#include "asic_profile.h"
 
 namespace amdgpu {
 
@@ -44,35 +45,36 @@ namespace amdgpu {
 // aligned) + `const size_t <sym>_size`.
 extern "C" {
 
-extern const uint8_t fw_psp_14_0_3_sos[];
-extern const size_t  fw_psp_14_0_3_sos_size;
+// Symbol names come from asic_profile.h (PSP 14.0.3 / GC 12.0.1 blobs on Navi 48, 14.0.2 / 12.0.0 on Navi 44).
+extern const uint8_t COBALT_FW_PSP_SYM(sos)[];
+extern const size_t  COBALT_FW_PSP_SIZE(sos);
 
-extern const uint8_t fw_psp_14_0_3_ta[];
-extern const size_t  fw_psp_14_0_3_ta_size;
+extern const uint8_t COBALT_FW_PSP_SYM(ta)[];
+extern const size_t  COBALT_FW_PSP_SIZE(ta);
 
-extern const uint8_t fw_gc_12_0_1_imu[];
-extern const size_t  fw_gc_12_0_1_imu_size;
+extern const uint8_t COBALT_FW_GC_SYM(imu)[];
+extern const size_t  COBALT_FW_GC_SIZE(imu);
 
-extern const uint8_t fw_gc_12_0_1_pfp[];
-extern const size_t  fw_gc_12_0_1_pfp_size;
+extern const uint8_t COBALT_FW_GC_SYM(pfp)[];
+extern const size_t  COBALT_FW_GC_SIZE(pfp);
 
-extern const uint8_t fw_gc_12_0_1_me[];
-extern const size_t  fw_gc_12_0_1_me_size;
+extern const uint8_t COBALT_FW_GC_SYM(me)[];
+extern const size_t  COBALT_FW_GC_SIZE(me);
 
-extern const uint8_t fw_gc_12_0_1_mec[];
-extern const size_t  fw_gc_12_0_1_mec_size;
+extern const uint8_t COBALT_FW_GC_SYM(mec)[];
+extern const size_t  COBALT_FW_GC_SIZE(mec);
 
-extern const uint8_t fw_gc_12_0_1_uni_mes[];
-extern const size_t  fw_gc_12_0_1_uni_mes_size;
+extern const uint8_t COBALT_FW_GC_SYM(uni_mes)[];
+extern const size_t  COBALT_FW_GC_SIZE(uni_mes);
 
-extern const uint8_t fw_gc_12_0_1_rlc[];
-extern const size_t  fw_gc_12_0_1_rlc_size;
+extern const uint8_t COBALT_FW_GC_SYM(rlc)[];
+extern const size_t  COBALT_FW_GC_SIZE(rlc);
 
-extern const uint8_t fw_smu_14_0_3[];
-extern const size_t  fw_smu_14_0_3_size;
+extern const uint8_t COBALT_FW_SMU_SYM[];
+extern const size_t  COBALT_FW_SMU_SIZE;
 
-extern const uint8_t fw_sdma_7_0_1[];
-extern const size_t  fw_sdma_7_0_1_size;
+extern const uint8_t COBALT_FW_SDMA_SYM[];
+extern const size_t  COBALT_FW_SDMA_SIZE;
 
 } // extern "C"
 
@@ -99,31 +101,31 @@ void build_table() {
     if (g_built) return;
 
     g_table[static_cast<uint32_t>(FwId::PSP_SOS)] =
-        FwBlob{ fw_psp_14_0_3_sos, fw_psp_14_0_3_sos_size, "psp_14_0_3_sos", FwId::PSP_SOS };
+        FwBlob{ COBALT_FW_PSP_SYM(sos), COBALT_FW_PSP_SIZE(sos), COBALT_FW_PSP_NAME(sos), FwId::PSP_SOS };
     g_table[static_cast<uint32_t>(FwId::PSP_TA)] =
-        FwBlob{ fw_psp_14_0_3_ta, fw_psp_14_0_3_ta_size, "psp_14_0_3_ta", FwId::PSP_TA };
+        FwBlob{ COBALT_FW_PSP_SYM(ta), COBALT_FW_PSP_SIZE(ta), COBALT_FW_PSP_NAME(ta), FwId::PSP_TA };
     g_table[static_cast<uint32_t>(FwId::GC_IMU)] =
-        FwBlob{ fw_gc_12_0_1_imu, fw_gc_12_0_1_imu_size, "gc_12_0_1_imu", FwId::GC_IMU };
+        FwBlob{ COBALT_FW_GC_SYM(imu), COBALT_FW_GC_SIZE(imu), COBALT_FW_GC_NAME(imu), FwId::GC_IMU };
     g_table[static_cast<uint32_t>(FwId::GC_PFP)] =
-        FwBlob{ fw_gc_12_0_1_pfp, fw_gc_12_0_1_pfp_size, "gc_12_0_1_pfp", FwId::GC_PFP };
+        FwBlob{ COBALT_FW_GC_SYM(pfp), COBALT_FW_GC_SIZE(pfp), COBALT_FW_GC_NAME(pfp), FwId::GC_PFP };
     g_table[static_cast<uint32_t>(FwId::GC_ME)] =
-        FwBlob{ fw_gc_12_0_1_me, fw_gc_12_0_1_me_size, "gc_12_0_1_me", FwId::GC_ME };
+        FwBlob{ COBALT_FW_GC_SYM(me), COBALT_FW_GC_SIZE(me), COBALT_FW_GC_NAME(me), FwId::GC_ME };
     g_table[static_cast<uint32_t>(FwId::GC_MEC)] =
-        FwBlob{ fw_gc_12_0_1_mec, fw_gc_12_0_1_mec_size, "gc_12_0_1_mec", FwId::GC_MEC };
+        FwBlob{ COBALT_FW_GC_SYM(mec), COBALT_FW_GC_SIZE(mec), COBALT_FW_GC_NAME(mec), FwId::GC_MEC };
     g_table[static_cast<uint32_t>(FwId::GC_MES)] =
-        FwBlob{ nullptr, 0, "gc_12_0_1_mes", FwId::GC_MES };
+        FwBlob{ nullptr, 0, COBALT_FW_GC_NAME(mes), FwId::GC_MES };
     g_table[static_cast<uint32_t>(FwId::GC_MES1)] =
-        FwBlob{ nullptr, 0, "gc_12_0_1_mes1", FwId::GC_MES1 };
+        FwBlob{ nullptr, 0, COBALT_FW_GC_NAME(mes1), FwId::GC_MES1 };
     g_table[static_cast<uint32_t>(FwId::GC_UNI_MES)] =
-        FwBlob{ fw_gc_12_0_1_uni_mes, fw_gc_12_0_1_uni_mes_size, "gc_12_0_1_uni_mes", FwId::GC_UNI_MES };
+        FwBlob{ COBALT_FW_GC_SYM(uni_mes), COBALT_FW_GC_SIZE(uni_mes), COBALT_FW_GC_NAME(uni_mes), FwId::GC_UNI_MES };
     g_table[static_cast<uint32_t>(FwId::GC_RLC)] =
-        FwBlob{ fw_gc_12_0_1_rlc, fw_gc_12_0_1_rlc_size, "gc_12_0_1_rlc", FwId::GC_RLC };
+        FwBlob{ COBALT_FW_GC_SYM(rlc), COBALT_FW_GC_SIZE(rlc), COBALT_FW_GC_NAME(rlc), FwId::GC_RLC };
     g_table[static_cast<uint32_t>(FwId::GC_TOC)] =
-        FwBlob{ nullptr, 0, "gc_12_0_1_toc", FwId::GC_TOC };
+        FwBlob{ nullptr, 0, COBALT_FW_GC_NAME(toc), FwId::GC_TOC };
     g_table[static_cast<uint32_t>(FwId::SMU)] =
-        FwBlob{ fw_smu_14_0_3, fw_smu_14_0_3_size, "smu_14_0_3", FwId::SMU };
+        FwBlob{ COBALT_FW_SMU_SYM, COBALT_FW_SMU_SIZE, COBALT_FW_SMU_NAME, FwId::SMU };
     g_table[static_cast<uint32_t>(FwId::SDMA)] =
-        FwBlob{ fw_sdma_7_0_1, fw_sdma_7_0_1_size, "sdma_7_0_1", FwId::SDMA };
+        FwBlob{ COBALT_FW_SDMA_SYM, COBALT_FW_SDMA_SIZE, COBALT_FW_SDMA_NAME, FwId::SDMA };
 
     g_built = true;
 }

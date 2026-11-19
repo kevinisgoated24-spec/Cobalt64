@@ -1,0 +1,233 @@
+From 4524aea774eb1f545cfa9b20876ea11f82adbd3d Mon Sep 17 00:00:00 2001
+From: Cobalt64 <cobalt64@example.invalid>
+Date: Wed, 18 Nov 2026 16:05:12 -0800
+Subject: [PATCH] radv/darwin: Navi 44 (RX 9060 XT, gfx1200) device table,
+ selected from the kext's live GC version
+
+Mesa has no gfx1200 drm-shim table, so the Darwin backend now derives one from
+the canned gfx1201 dump: same GFX12 IP / firmware family / VA layout, half the
+die (2 SE x 2 SA x 8 CU = 32 CUs, 8 RBs, 128-bit GDDR6, 4 MiB L2, 32 MiB MALL),
+device 0x7590, external_rev 0x40 (identify_chip(GFX1200)).
+
+GB_ADDR_CONFIG is not guessed: the gfx1200 table carries the live register
+value from QueryInfo.  The selection is automatic: n48n_info.gc_version 12.0.0
+picks gfx1200, 12.0.1 keeps gfx1201 (with the existing exact GB_ADDR_CONFIG
+check).  RADV_DARWIN_ASIC=gfx1200 selects it before the kext answers and makes
+the RADV_DARWIN_MOCK kext report GC 12.0.0, so the path can be exercised
+without hardware.  The marketing name follows the table.
+---
+ src/amd/common/darwin/ac_darwin_drm.c  | 107 ++++++++++++++++++++++---
+ src/amd/common/darwin/ac_darwin_mock.c |   7 +-
+ 2 files changed, 104 insertions(+), 10 deletions(-)
+
+diff --git a/src/amd/common/darwin/ac_darwin_drm.c b/src/amd/common/darwin/ac_darwin_drm.c
+index 9e35f8434dc..a60d5d2287d 100644
+--- a/src/amd/common/darwin/ac_darwin_drm.c
++++ b/src/amd/common/darwin/ac_darwin_drm.c
+@@ -26,8 +26,13 @@
+ #define ACD_DRM_MAJOR AC_AMDGPU_DRM_MAJOR
+ #define ACD_DRM_MINOR AC_AMDGPU_DRM_MINOR
+ 
+-/* amdgpu.ids: 7550,C0 */
+-#define ACD_MARKETING_NAME "AMD Radeon RX 9070 XT"
++/* amdgpu.ids: 7550,C0 / 7590,C0 */
++#define ACD_MARKETING_NAME_GFX1201 "AMD Radeon RX 9070 XT"
++#define ACD_MARKETING_NAME_GFX1200 "AMD Radeon RX 9060 XT"
++
++/* n48n_info.gc_version is (maj<<16)|(min<<8)|rev: GC 12.0.0 is Navi 44 (gfx1200), GC 12.0.1 Navi 48 (gfx1201). */
++#define ACD_GC_VERSION_GFX1200 0x0c0000u
++#define ACD_GC_VERSION_GFX1201 0x0c0001u
+ 
+ #define ACD_METADATA_MAX 256
+ /* How long a submit blocks on a dependency that was never submitted (WAIT_FOR_SUBMIT). */
+@@ -66,6 +71,7 @@ struct acd_core {
+    struct util_sync_provider *sync; /* master; every device holds a clone */
+    pthread_mutex_t bo_lock;
+    struct amdgpu_bo *bos[N48N_MAX_BOS]; /* by kext handle */
++   const struct amdgpu_device *canned; /* the device table the kext's live GC version selected */
+ };
+ 
+ struct acd_device {
+@@ -96,6 +102,71 @@ find_canned(const char *name)
+    return NULL;
+ }
+ 
++/* Navi 44 (RX 9060 XT, gfx1200).  Mesa ships no gfx1200 drm-shim table, so derive one from the gfx1201
++ * dump: same GFX12 IP, firmware family and VA layout, half the die (2 SE x 2 SA x 8 CU = 32 CUs, 8 RBs,
++ * 128-bit GDDR6, 4 MiB L2, 32 MiB MALL).  GB_ADDR_CONFIG is not guessed: it is the live register value
++ * the kext reports, so addrlib tiles exactly as the hardware is configured.  external_rev = rev + 0x40
++ * (soc24.c), which is what ac_gpu_info's identify_chip(GFX1200) keys on (AMDGPU_GFX1200_RANGE 0x40..0x50). */
++static struct amdgpu_device g_gfx1200;
++static pthread_mutex_t g_gfx1200_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static const struct amdgpu_device *
++acd_canned_gfx1200(uint32_t gb_addr_config)
++{
++   const struct amdgpu_device *base = find_canned("gfx1201");
++   if (!base)
++      return NULL;
++
++   pthread_mutex_lock(&g_gfx1200_lock);
++   struct amdgpu_device *d = &g_gfx1200;
++   *d = *base;
++   d->name = "gfx1200";
++   d->radeon_family = CHIP_GFX1200;
++   d->hw_ip_gfx.ip_discovery_version = 0xc0000;
++   d->hw_ip_compute.ip_discovery_version = 0xc0000;
++   memset(d->mmr_regs, 0, sizeof(d->mmr_regs));
++   d->mmr_regs[0] = ACD_GB_ADDR_CONFIG_REG;
++   d->mmr_regs[1] = 0xffffffff;
++   d->mmr_regs[2] = gb_addr_config;
++   d->mmr_reg_count = 1;
++
++   struct drm_amdgpu_info_device *di = &d->dev;
++   di->device_id = 0x7590;
++   di->chip_rev = 0x00;
++   di->external_rev = 0x40;
++   di->pci_rev = 0xc0;
++   di->num_shader_engines = 2;
++   di->num_shader_arrays_per_engine = 2;
++   di->max_engine_clock = UINT64_C(3130000);
++   di->max_memory_clock = UINT64_C(1258000);
++   di->cu_active_number = 32;
++   memset(di->cu_bitmap, 0, sizeof(di->cu_bitmap));
++   di->cu_bitmap[0][0] = di->cu_bitmap[0][1] = 0xff;
++   di->cu_bitmap[1][0] = di->cu_bitmap[1][1] = 0xff;
++   memset(di->cu_ao_bitmap, 0, sizeof(di->cu_ao_bitmap));
++   di->enabled_rb_pipes_mask = 0xff;
++   di->enabled_rb_pipes_mask_hi = 0;
++   di->num_rb_pipes = 8;
++   di->pcie_gen = 5;
++   di->pcie_num_lanes = 16;
++   di->vram_bit_width = 128;
++   di->num_tcc_blocks = 16;
++   di->gl2c_cache_size = 4096;
++   di->mall_size = UINT64_C(33554432);
++   pthread_mutex_unlock(&g_gfx1200_lock);
++   return d;
++}
++
++/* Before the kext answers (and for the MOCK / HOST_BO stand-ins), RADV_DARWIN_ASIC=gfx1200 picks Navi 44. */
++static const struct amdgpu_device *
++acd_initial_canned(void)
++{
++   const char *asic = getenv("RADV_DARWIN_ASIC");
++   if (asic && !strcmp(asic, "gfx1200"))
++      return acd_canned_gfx1200(ACD_GB_ADDR_CONFIG_GFX1201);
++   return find_canned("gfx1201");
++}
++
+ /* kext wait callback for the sync provider: -ETIME from the kernel means "hung". */
+ static int
+ acd_backend_wait_seq(void *ctx, uint64_t seq, uint64_t rel_ns, bool *busy, uint64_t *retired)
+@@ -116,8 +187,9 @@ env_is_1(const char *name)
+ 
+ /* Hello, live checks and the info snapshot; every failure is one clear stderr line. */
+ static int
+-acd_native_handshake(struct acd_kext *kext, const struct amdgpu_device *canned, uint32_t *minor_out)
++acd_native_handshake(struct acd_kext *kext, const struct amdgpu_device **canned_io, uint32_t *minor_out)
+ {
++   const struct amdgpu_device *canned = *canned_io;
+    struct acd_hello h;
+    int r = acd_kext_hello(kext, &h);
+    if (r) {
+@@ -153,7 +225,22 @@ acd_native_handshake(struct acd_kext *kext, const struct amdgpu_device *canned,
+          return r;
+       }
+    }
+-   if (gb != ACD_GB_ADDR_CONFIG_GFX1201 && !env_is_1("RADV_DARWIN_ALLOW_ADDRCFG")) {
++   /* Navi 44: the kext's live GC version says gfx1200; build its table around the live GB_ADDR_CONFIG. */
++   if (info.gc_version == ACD_GC_VERSION_GFX1200) {
++      canned = acd_canned_gfx1200(gb);
++      if (!canned)
++         return -ENODEV;
++      *canned_io = canned;
++   } else if (info.gc_version && info.gc_version != ACD_GC_VERSION_GFX1201) {
++      fprintf(stderr, "radv-darwin: kext reports GC %u.%u.%u, which is neither Navi 48 (12.0.1) nor Navi 44 (12.0.0)\n",
++              info.gc_version >> 16, (info.gc_version >> 8) & 0xff, info.gc_version & 0xff);
++      return -ENODEV;
++   } else if (info.gc_version == ACD_GC_VERSION_GFX1201 && canned->radeon_family == CHIP_GFX1200) {
++      canned = find_canned("gfx1201"); /* RADV_DARWIN_ASIC=gfx1200 on a Navi 48: the live GC version wins */
++      *canned_io = canned;
++   }
++   if (canned->radeon_family == CHIP_GFX1201 && gb != ACD_GB_ADDR_CONFIG_GFX1201 &&
++       !env_is_1("RADV_DARWIN_ALLOW_ADDRCFG")) {
+       fprintf(stderr, "radv-darwin: live GB_ADDR_CONFIG 0x%08x != canned gfx1201 0x%08x (set "
+                       "RADV_DARWIN_ALLOW_ADDRCFG=1 to override)\n",
+               gb, ACD_GB_ADDR_CONFIG_GFX1201);
+@@ -177,9 +264,9 @@ acd_native_handshake(struct acd_kext *kext, const struct amdgpu_device *canned,
+    static bool logged;
+    if (!logged) {
+       logged = true;
+-      fprintf(stderr, "radv-darwin: native kext: ABI %u.%u, build %u, VMID %u, max %u IBs/submit, GB_ADDR_CONFIG "
++      fprintf(stderr, "radv-darwin: native kext: %s, ABI %u.%u, build %u, VMID %u, max %u IBs/submit, GB_ADDR_CONFIG "
+                       "0x%08x, VRAM %llu MiB visible + %llu MiB hi, GTT cap %llu MiB\n",
+-              h.abi, h.minor, h.build, h.vmid, h.max_ibs, gb, (unsigned long long)(info.vram_vis_total >> 20),
++              canned->name, h.abi, h.minor, h.build, h.vmid, h.max_ibs, gb, (unsigned long long)(info.vram_vis_total >> 20),
+               (unsigned long long)(info.vram_hi_total >> 20), (unsigned long long)(info.gtt_cap >> 20));
+    }
+    return 0;
+@@ -206,7 +293,7 @@ acd_core_create(const struct amdgpu_device *canned, bool host_bo, struct acd_cor
+    if (!host_bo) {
+       int r = acd_kext_open(&c->kext);
+       if (r == 0)
+-         r = acd_native_handshake(c->kext, canned, &c->minor);
++         r = acd_native_handshake(c->kext, &canned, &c->minor);
+       if (r) {
+          acd_kext_destroy(c->kext);
+          pthread_mutex_destroy(&c->bo_lock);
+@@ -228,6 +315,7 @@ acd_core_create(const struct amdgpu_device *canned, bool host_bo, struct acd_cor
+       return -ENOMEM;
+    }
+ 
++   c->canned = canned;
+    const struct drm_amdgpu_info_device *di = &canned->dev;
+    /* gfx12: RADV needs half of the VA range reserved for PRT, as on Linux. */
+    amdgpu_va_manager_init2(c->va_mgr, di->virtual_address_offset, di->virtual_address_max, di->high_va_offset,
+@@ -257,7 +345,7 @@ acd_device_initialize(uint32_t *drm_major, uint32_t *drm_minor, acd_device_handl
+    if (!dev)
+       return -ENOMEM;
+ 
+-   dev->canned = find_canned("gfx1201");
++   dev->canned = acd_initial_canned();
+    if (!dev->canned) {
+       free(dev);
+       return -ENODEV;
+@@ -288,6 +376,7 @@ acd_device_initialize(uint32_t *drm_major, uint32_t *drm_minor, acd_device_handl
+       return r;
+    }
+ 
++   dev->canned = dev->core->canned; /* the kext's live GC version may have switched gfx1201 -> gfx1200 */
+    dev->sync = dev->core->sync->clone(dev->core->sync);
+    if (!dev->sync) {
+       acd_device_deinitialize(dev);
+@@ -331,7 +420,7 @@ acd_device_get_sync_provider(acd_device_handle dev)
+ const char *
+ acd_get_marketing_name(acd_device_handle dev)
+ {
+-   return ACD_MARKETING_NAME;
++   return dev->canned->radeon_family == CHIP_GFX1200 ? ACD_MARKETING_NAME_GFX1200 : ACD_MARKETING_NAME_GFX1201;
+ }
+ 
+ int
+diff --git a/src/amd/common/darwin/ac_darwin_mock.c b/src/amd/common/darwin/ac_darwin_mock.c
+index b7588d5efba..c784361f26f 100644
+--- a/src/amd/common/darwin/ac_darwin_mock.c
++++ b/src/amd/common/darwin/ac_darwin_mock.c
+@@ -612,7 +612,12 @@ mock_call(void *ctx, uint32_t sel, const uint64_t *sin, uint32_t nsin, const voi
+       inf.flags = N48N_INFO_S1B_POSITIVE | N48N_INFO_NATIVE_BOOT;
+       inf.vmid = 8;
+       inf.gb_addr_config = ACD_GB_ADDR_CONFIG_GFX1201;
+-      inf.gc_version = (12u << 16) | (0u << 8) | 1u;
++      {
++         /* RADV_DARWIN_ASIC=gfx1200 mocks a Navi 44 (GC 12.0.0); the GB_ADDR_CONFIG stays the gfx1201 one. */
++         const char *asic = getenv("RADV_DARWIN_ASIC");
++         const bool n44 = asic && !strcmp(asic, "gfx1200");
++         inf.gc_version = (12u << 16) | (0u << 8) | (n44 ? 0u : 1u);
++      }
+       inf.ring_size_dw = 4096;
+       inf.max_ibs = N48N_MAX_IBS;
+       inf.vram_vis_total = MOCK_VIS_TOTAL;
+-- 
+2.54.0.windows.1
+

@@ -3,6 +3,7 @@
 //  bootloader chain when navi48-psp=1.
 //
 #include "Navi48Bringup.hpp"
+#include "asic_profile.h"
 #include "apple/Navi48Ttl.hpp"
 #include "apple/AppleTtlHook.hpp"
 #include "apple/AppleHardwareHook.hpp"
@@ -40,8 +41,8 @@
                                      // yields are both timed (mirrors AppleHardwareHook.cpp's n48_pol_ns)
 
 extern "C" {
-extern const uint8_t fw_psp_14_0_3_sos[];
-extern const size_t  fw_psp_14_0_3_sos_size;
+extern const uint8_t COBALT_FW_PSP_SYM(sos)[];
+extern const size_t  COBALT_FW_PSP_SIZE(sos);
 }
 
 OSDefineMetaClassAndStructors(Navi48Bringup, IOService)
@@ -583,7 +584,7 @@ void Navi48Bringup::stagePSP() {
 
 	HwBridge hw(this);
 	n48::PspLoader psp(hw);
-	if (!psp.parseContainer(fw_psp_14_0_3_sos, fw_psp_14_0_3_sos_size)) {
+	if (!psp.parseContainer(COBALT_FW_PSP_SYM(sos), COBALT_FW_PSP_SIZE(sos))) {
 		N48LOG("psp-stage: embedded container failed to parse; aborting"); setProperty("PSP,Stage", "bad-container"); return;
 	}
 	setProperty("PSP,ContainerSOSVersion", static_cast<uint64_t>(psp.sosVersion()), 32);
@@ -7332,10 +7333,10 @@ IOService *Navi48Bringup::probe(IOService *provider, SInt32 *score) {
 	if (!pci) return nullptr;
 	uint32_t vendorDevice = pci->configRead32(kIOPCIConfigVendorID);
 	uint16_t device = static_cast<uint16_t>(vendorDevice >> 16);
-	if ((vendorDevice & 0xffff) != 0x1002 || (device != 0x7550 && device != 0x7551)) {
-		N48LOG("probe: 0x%08x not Navi 48, ignoring", vendorDevice); return nullptr;
+	if ((vendorDevice & 0xffff) != 0x1002 || (device != COBALT_ASIC_PCI_ID0 && device != COBALT_ASIC_PCI_ID1)) {
+		N48LOG("probe: 0x%08x not " COBALT_ASIC_NAME " (this kext is built for " COBALT_ASIC_GFX_NAME "), ignoring", vendorDevice); return nullptr;
 	}
-	N48LOG("probe: Navi 48 %s (0x%04x) — bring-up enabled", device == 0x7550 ? "RX 9070/XT" : "R9700", device);
+	N48LOG("probe: " COBALT_ASIC_NAME " %s (0x%04x) — bring-up enabled", device == COBALT_ASIC_PCI_ID0 ? COBALT_ASIC_PCI_NAME0 : COBALT_ASIC_PCI_NAME1, device);
 	return this;
 }
 

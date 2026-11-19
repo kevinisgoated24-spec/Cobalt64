@@ -20,6 +20,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "asic_profile.h"
 
 namespace amdgpu {
 
@@ -45,12 +46,12 @@ struct IPVersion {
     uint8_t rev;
 };
 
-constexpr IPVersion kIP_GFX  = { 12, 0, 1 };
+constexpr IPVersion kIP_GFX  = { COBALT_IP_GFX };
 constexpr IPVersion kIP_GMC  = { 12, 0, 0 };
-constexpr IPVersion kIP_SDMA = { 7,  0, 1 };
-constexpr IPVersion kIP_PSP  = { 14, 0, 3 };
-constexpr IPVersion kIP_SMU  = { 14, 0, 3 };
-constexpr IPVersion kIP_MES  = { 12, 0, 1 };
+constexpr IPVersion kIP_SDMA = { COBALT_IP_SDMA };
+constexpr IPVersion kIP_PSP  = { COBALT_IP_PSP };
+constexpr IPVersion kIP_SMU  = { COBALT_IP_SMU };
+constexpr IPVersion kIP_MES  = { COBALT_IP_MES };
 constexpr IPVersion kIP_NBIO = { 7,  11, 0 };
 constexpr IPVersion kIP_IH   = { 7,  0, 0 };
 constexpr IPVersion kIP_HDP  = { 7,  0, 0 };
